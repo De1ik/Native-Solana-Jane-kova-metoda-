@@ -1,0 +1,13 @@
+[package]
+name = "janecek_voting"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "janecek_voting"
+crate-type = ["cdylib"]
+
+[dependencies]
+solana-program = "1.18.10"
+borsh = { version = "1.5", features = ["derive"] }
+thiserror = "1.0"
