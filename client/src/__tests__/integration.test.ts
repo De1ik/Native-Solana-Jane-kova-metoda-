@@ -3,18 +3,12 @@ import {
   Keypair, 
   PublicKey, 
   clusterApiUrl,
-  LAMPORTS_PER_SOL
 } from '@solana/web3.js';
-import { 
-  JanecekVotingClient, 
-  VoteType, 
-  VotingPhase,
-  PollState,
-  PartyAccount,
-  VoterAccount
-} from '../index';
-
-import { deserialize } from "borsh";
+import { getPollState } from '../services/pollService'
+import { createPoll } from '../services/pollTransaction';
+import { VotingPhase } from '../types/VotingPhase';
+import { deserializePollState } from '../utils/deserialize';
+import { createAccountDeserializer } from '../services/accountService';
 
 describe('Janecek Voting Tests', () => {
   let connection: Connection;
@@ -22,62 +16,10 @@ describe('Janecek Voting Tests', () => {
   let voter1: Keypair;
   let voter2: Keypair;
   let programId: PublicKey;
-  let pollOwnerClient: JanecekVotingClient;
-  let voter1Client: JanecekVotingClient;
-  let voter2Client: JanecekVotingClient;
   let pollPda: PublicKey;
   let partyAPda: PublicKey;
   let partyBPda: PublicKey;
   let randomSeed: String;
-
-
-// === 1. Класс и схема должны соответствовать структуре Rust ===
-class PollState {
-    discriminator: any;
-    title: any;
-    description: any;
-    phase: any;
-    owner: any;
-    parties: any;
-  
-    constructor(fields: Partial<PollState> = {}) {
-      Object.assign(this, fields);
-    }
-  }
-  
-  const PollStateSchema = new Map([
-    [
-      PollState,
-      {
-        kind: "struct",
-        fields: [
-          ["discriminator", "string"],
-          ["title", "string"],
-          ["description", "string"],
-          ["phase", "u8"],
-          ["owner", [32]],
-          ["parties", ["vector", [32]]], // если parties — это массив Pubkey
-        ],
-      },
-    ],
-  ]);
-  
-  // === 2. Функция десериализации PDA ===
-  async function getPollState(pdaPubkey: PublicKey, rpcUrl: string) {
-    const connection = new Connection(rpcUrl, "confirmed");
-    const accountInfo = await connection.getAccountInfo(pdaPubkey);
-    if (!accountInfo) throw new Error("PDA не найден!");
-  
-    // ⚠️ Если это Anchor-аккаунт — пропусти первые 8 байт discriminator
-    const data = accountInfo.data.slice(8);
-  
-    const pollState = deserialize(PollStateSchema, PollState, data);
-    return {
-      ...pollState,
-      owner: new PublicKey(pollState.owner),
-      parties: pollState.parties.map((p) => new PublicKey(p)),
-    };
-  }
 
 
   beforeAll(async () => {
@@ -100,25 +42,6 @@ class PollState {
     
     // program ID
     programId = new PublicKey('6LKL9MnuNGd3fpEp5U3P9Sm8LW5YuHasKRp8Jwyp9Hhy');
-    
-    // clients
-    pollOwnerClient = new JanecekVotingClient({
-      connection,
-      programId,
-      wallet: pollOwner,
-    });
-
-    voter1Client = new JanecekVotingClient({
-      connection,
-      programId,
-      wallet: voter1,
-    });
-
-    voter2Client = new JanecekVotingClient({
-      connection,
-      programId,
-      wallet: voter2,
-    });
 
     randomSeed = Keypair.generate().publicKey.toString()
 
@@ -135,10 +58,14 @@ class PollState {
 
     test('should create a poll successfully', async () => {
 
-      const { pollPda: createdPollPda, signature } = await pollOwnerClient.createPoll(
+      const { pollPda: createdPollPda, signature } = await createPoll(
+        connection,
+        pollOwner,
         'Integration Test Poll ' + randomSeed,
         'Testing the complete voting system functionality'
-      );
+      ); 
+      await connection.confirmTransaction(signature, "confirmed");
+
       
       pollPda = createdPollPda;
       expect(pollPda).toBeInstanceOf(PublicKey);
@@ -148,17 +75,17 @@ class PollState {
       console.log('Transaction signature:', signature);
     });
 
-    // test('should retrieve poll state after creation', async () => {
-    //   const pollState = await pollOwnerClient.getPollState(pollPda);
+    test('should retrieve poll state after creation', async () => {
+      const deserializer = createAccountDeserializer(connection);
+      const pollState = await deserializer.getPollState(pollPda);
       
-    //   expect(pollState).toBeDefined();
-    //   expect(pollState!.title).toBe('Integration Test Poll ' + randomSeed);
-    //   expect(pollState!.description).toBe('Testing the complete voting system functionality');
-    //   expect(pollState!.phase).toBe(VotingPhase.Registration);
-    //   expect(pollState!.owner.toString()).toBe(pollOwner.publicKey.toString());
-    //   expect(pollState!.parties).toHaveLength(0);
-
-    // });
+      expect(pollState).toBeDefined();
+      expect(pollState!.title).toBe('Integration Test Poll ' + randomSeed);
+      expect(pollState!.description).toBe('Testing the complete voting system functionality');
+      expect(pollState!.getVotingPhase()).toBe(VotingPhase.Registration);
+      expect(pollState!.getOwnerPubkey().toString()).toBe(pollOwner.publicKey.toString());
+      expect(pollState!.parties).toHaveLength(0);
+    });
 
     // test('should create parties successfully', async () => {
     //   const { partyPda: createdPartyAPda, signature: signatureA } = await pollOwnerClient.createParty(
@@ -205,9 +132,7 @@ class PollState {
     //   expect(parties.some(p => p.title === 'Democratic Party')).toBe(true);
     //   expect(parties.some(p => p.title === 'Republican Party')).toBe(true);
     // });
-    z
- });
-
+  });
 
 //   describe('Voting Phase Management', () => {
 //     test('should start voting phase', async () => {
