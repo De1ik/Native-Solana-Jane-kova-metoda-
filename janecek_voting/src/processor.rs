@@ -91,7 +91,9 @@ pub fn create_poll(
         program_id,
     );
     if pda != *poll_account.key {
-        msg!("Invalid seeds for PDA");
+        msg!("Invalid seeds for PDA :(");
+        msg!("pda: {}", pda);
+        msg!("poll_account.key: {}", poll_account.key);
         return Err(ProgramError::InvalidArgument);
     }
     
@@ -452,15 +454,14 @@ pub fn vote(
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    // Validate poll account is initialized
-    let poll_data = poll_account.data.borrow();
+    let poll_data = poll_account.data.borrow_mut();
+
     if poll_data.iter().all(|&b| b == 0) {
         msg!("Poll account not initialized");
         return Err(ProgramError::UninitializedAccount);
     }
-    let poll_state = PollState::try_from_slice(&poll_data)?;
-    drop(poll_data);
 
+    let mut poll_state = PollState::try_from_slice(&poll_data)?;
 
     // Check Registration phase
     if !matches!(poll_state.phase, VotingPhase::Voting) {
@@ -471,9 +472,8 @@ pub fn vote(
     // Check that the voting period is not finished
     let clock = Clock::get()?;
     let elapsed = clock.unix_timestamp - poll_state.created_at;
-    if elapsed < 86_400 * 7 {
+    if elapsed > 86_400 * 7 {
         msg!("Voting period is finished");
-        let mut poll_state = poll_state;
         poll_state.phase = VotingPhase::Results;
         poll_state.serialize(&mut &mut poll_account.data.borrow_mut()[..])?;
         return Err(JanecekError::VotingPeriodFinished.into());
@@ -481,15 +481,18 @@ pub fn vote(
 
     // Validate party account is initialized
     let party_data: std::cell::Ref<'_, &mut [u8]> = party_account.data.borrow();
+    
     if party_data.iter().all(|&b| b == 0) {
         msg!("Party account not initialized");
         return Err(ProgramError::UninitializedAccount);
     }
-    let party_state = PartyAccount::try_from_slice(&party_data)?;
-    drop(party_data);
+    
+    let mut party_state = PartyAccount::try_from_slice(&party_data)?;
+
 
     // Validate voter account is initialized
     let voter_data: std::cell::Ref<'_, &mut [u8]> = voter_account.data.borrow();
+    
     if voter_data.iter().all(|&b| b == 0) {
         msg!("Voter account not initialized");
         
@@ -547,14 +550,8 @@ pub fn vote(
         msg!("Voter state serialized");
 
     }
-    let voter_state = VoterAccount::try_from_slice(&voter_data)?;
-    drop(voter_data);
-
-    // Only the current owner can initiate
-    if voter_state.voter_key != *initializer.key {
-        msg!("Only the owner of Voter account can vote");
-        return Err(ProgramError::IllegalOwner);
-    }
+    
+    let mut voter_state = VoterAccount::try_from_slice(&voter_data)?;
 
     // Only the current owner can initiate
     if voter_state.voter_key != *initializer.key {
@@ -563,38 +560,46 @@ pub fn vote(
     }
 
     // Can not vote twice
-    if voter_state.voted_parties.contains(&*party_account.key) {
+    if voter_state.voted_parties.contains(party_account.key) {
         msg!("Voter already voted for this party");
         return Err(JanecekError::AlreadyVoted.into());
     }
 
+    voter_state.voted_parties.push(*party_account.key);
+
     match vote_type {
         VoteType::Positive => {
-            if (voter_state.positive_used >= 2) {
+            if voter_state.positive_used >= 2 {
                 return Err(JanecekError::NoPositiveVoice.into());
             }
-            let mut voter_state = voter_state;
-            voter_state.voted_parties.push(*party_account.key);
             voter_state.positive_used += 1;
-            voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
             msg!("Voter state updated");
         },
 
         VoteType::Negative => {
-            if (voter_state.negative_used >= 1) {
+            if voter_state.negative_used >= 1 {
                 return Err(JanecekError::NoNegativeVoice.into());
             }
-            if (voter_state.positive_used < 2) {
+            if voter_state.positive_used < 2 {
                 return Err(JanecekError::MustUseAllPositiveVoices.into());
             }
-            let mut voter_state = voter_state;
-            voter_state.voted_parties.push(*party_account.key);
             voter_state.negative_used += 1;
-            voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
             msg!("Voter state updated");
         },
     }
+    voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
 
+    match vote_type {
+        VoteType::Positive => {
+            party_state.positive_votes += 1;
+        },
+        VoteType::Negative => {
+            party_state.negative_votes += 1;
+        },
+    }
+
+    party_state.serialize(&mut &mut party_account.data.borrow_mut()[..])?;
+    
     Ok(())
 }
 
@@ -603,9 +608,9 @@ pub fn end_voting(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
 ) -> ProgramResult {
-    msg!("Ending voting...");
+    msg!("Ending voting... {} {}", program_id, accounts.len());
 
-    let account_info_iter = &mut accounts.iter();
+    // let account_info_iter = &mut accounts.iter();
 
     Ok(())
 }
