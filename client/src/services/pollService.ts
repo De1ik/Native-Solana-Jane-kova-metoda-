@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { PollState } from "../types/PollState";
+import { PollState } from "../accounts/PollAccount";
 import { createAccountDeserializer } from "./accountService";
 
 export async function getPollState(

@@ -22,4 +22,27 @@ export class PdaDerivation {
             programId
         );
     }
+
+    static derivePartyPda(
+        programId: PublicKey,
+        pollPda: PublicKey,
+        title: string,
+    ): [PublicKey, number] {
+        const titlehash = this.hashString(title);
+        return PublicKey.findProgramAddressSync(
+            [Buffer.from('party'), pollPda.toBuffer(), Buffer.from(titlehash)],
+            programId
+        );
+    }
+
+    static deriveVoterPda(
+        programId: PublicKey,
+        pollPda: PublicKey,
+        voter: PublicKey,
+    ): [PublicKey, number] {
+        return PublicKey.findProgramAddressSync(
+            [Buffer.from('voter'), pollPda.toBuffer(), voter.toBuffer()],
+            programId
+        );
+    }
 }

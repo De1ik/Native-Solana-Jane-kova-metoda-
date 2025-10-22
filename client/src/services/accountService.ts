@@ -1,7 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
-import { PollState } from "../types/PollState";
-import { PartyAccount } from "../types/PartyAccount";
-import { VoterAccount } from "../types/VoterAccount";
+import { PollState } from "../accounts/PollAccount";
+import { PartyAccount } from "../accounts/PartyAccount";
+import { VoterAccount } from "../accounts/VoterAccount";
 import { 
     deserializePollState, 
     deserializePartyAccount, 
@@ -52,15 +52,3 @@ export class AccountDeserializer {
 export function createAccountDeserializer(connection: Connection): AccountDeserializer {
     return new AccountDeserializer(connection);
 }
-
-// Utility function to create a custom deserializer for any account type
-// export function createCustomDeserializer<T>(
-//     connection: Connection,
-//     deserializerFn: (data: Buffer) => any,
-//     classType: new (fields: any) => T
-// ) {
-//     return async (accountPda: PublicKey): Promise<T> => {
-//         const accountDeserializer = new AccountDeserializer(connection);
-//         return accountDeserializer.deserializeAccount(accountPda, deserializerFn, classType);
-//     };
-// }

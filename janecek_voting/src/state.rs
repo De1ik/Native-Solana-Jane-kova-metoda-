@@ -21,7 +21,7 @@ pub struct PollState {
     pub title: String,
     pub description: String,
     pub phase: VotingPhase,
-    pub parties: Vec<Pubkey>,
+    pub party_counter: u64,
     pub owner: Pubkey,
     pub expected_new_owner: Pubkey,
     pub created_at: i64,
@@ -31,12 +31,12 @@ pub struct PollState {
 impl PollState {
     pub const DISCRIMINATOR: &'static str = "poll";
 
-    pub fn get_account_size(title: &String, description: &String, parties_count: usize) -> usize {
+    pub fn get_account_size(title: &String, description: &String) -> usize {
         return (4 + PollState::DISCRIMINATOR.len()) 
         + (4 + title.len()) 
         + (4 + description.len())
         + 1
-        + 4 + (32 * parties_count)
+        + 8
         + 32
         + 32
         + 8
@@ -81,13 +81,14 @@ pub struct VoterAccount {
 
 impl VoterAccount {
     pub const DISCRIMINATOR: &'static str = "voter";
+    pub const MAX_VOTED_PARTIES: usize = 3;
 
-    pub fn get_account_size(parties_count: usize) -> usize {
+    pub fn get_account_size() -> usize {
         return (4 + VoterAccount::DISCRIMINATOR.len())
         + 32
         + 32
         + 1
         + 1
-        + 4 + (32 * parties_count);
+        + 4 + (32 * VoterAccount::MAX_VOTED_PARTIES);
     }
 }

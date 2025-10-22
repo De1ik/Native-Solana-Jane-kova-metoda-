@@ -1,7 +1,10 @@
-export const CREATE_POLL_DISCRIMINATOR = 0;
-export const CREATE_PARTY_DISCRIMINATOR = 1;
-export const INITIATE_OWNER_TRANSFER_DISCRIMINATOR = 2;
-export const ACCEPT_OWNER_TRANSFER_DISCRIMINATOR = 3;
-export const START_VOTING_DISCRIMINATOR = 4;
-export const VOTE_DISCRIMINATOR = 5;
-export const END_VOTING_DISCRIMINATOR = 6;
+export enum InstructionDiscriminator {
+    CreatePoll = 0,
+    CreateParty = 1,
+    InitiateOwnerTransfer = 2,
+    AcceptOwnerTransfer = 3,
+    StartVoting = 4,
+    Vote = 5,
+    EndVoting = 6,
+  }
+  

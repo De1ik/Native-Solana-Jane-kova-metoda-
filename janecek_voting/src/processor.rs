@@ -98,11 +98,12 @@ pub fn create_poll(
     }
     
     // Create poll PDA
-    let account_len: usize = PollState::get_account_size(&title, &description, 0);
+    let account_len: usize = PollState::get_account_size(&title, &description);
     let rent = Rent::get()?;
     let rent_lamports = rent.minimum_balance(account_len);
-    let seeds: &[&[u8]] = &[ b"", title_hash.as_ref(), description_hash.as_ref(), &[bump_seed]];
+    let seeds: &[&[u8]] = &[ b"poll", title_hash.as_ref(), description_hash.as_ref(), &[bump_seed]];
 
+    msg!("Start invoke-signed");
 
     invoke_signed(
         &system_instruction::create_account(
@@ -129,12 +130,13 @@ pub fn create_poll(
         title,
         description,
         phase: VotingPhase::Registration,
-        parties: Vec::new(),
+        party_counter: 0,
         owner: *initializer.key,
         expected_new_owner: *initializer.key,
         created_at: clock.unix_timestamp,
         voting_start_at: 0,
     };
+    msg!("Serializing poll_state: {:?}", poll_state);
     poll_state.serialize(&mut &mut poll_account.data.borrow_mut()[..])?;
     msg!("Poll state serialized");
 
@@ -248,7 +250,7 @@ pub fn create_party(
 
     // Update PollState
     let mut poll_state = PollState::try_from_slice(&poll_account.data.borrow())?;
-    poll_state.parties.push(party_pda);
+    poll_state.party_counter += 1;
     poll_state.serialize(&mut &mut poll_account.data.borrow_mut()[..])?;
     msg!("Poll state updated");
 
@@ -409,8 +411,14 @@ pub fn start_voting(
     let clock = Clock::get()?;
     let elapsed = clock.unix_timestamp - poll_state.created_at;
 
+    #[cfg(feature = "test-mode")]
+    const MIN_TIME_DELTA: i64 = 1;
+
+    #[cfg(not(feature = "test-mode"))]
+    const MIN_TIME_DELTA: i64 = 60 * 60 * 24;
+
     // Check that the registration period is not too short
-    if elapsed < 86_400 {
+    if elapsed < MIN_TIME_DELTA {
         msg!("Registration period must last at least 24 hours");
         return Err(JanecekError::RegistrationPhaseTooShort.into());
     }
@@ -454,7 +462,7 @@ pub fn vote(
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    let poll_data = poll_account.data.borrow_mut();
+    let poll_data = poll_account.data.borrow();
 
     if poll_data.iter().all(|&b| b == 0) {
         msg!("Poll account not initialized");
@@ -462,6 +470,7 @@ pub fn vote(
     }
 
     let mut poll_state = PollState::try_from_slice(&poll_data)?;
+    drop(poll_data);
 
     // Check Registration phase
     if !matches!(poll_state.phase, VotingPhase::Voting) {
@@ -472,7 +481,16 @@ pub fn vote(
     // Check that the voting period is not finished
     let clock = Clock::get()?;
     let elapsed = clock.unix_timestamp - poll_state.created_at;
-    if elapsed > 86_400 * 7 {
+
+
+    #[cfg(feature = "test-mode")]
+    const MIN_TIME_DELTA: i64 = 60;
+
+    #[cfg(not(feature = "test-mode"))]
+    const MIN_TIME_DELTA: i64 = 60 * 60 * 24 * 7;
+
+
+    if elapsed > MIN_TIME_DELTA {
         msg!("Voting period is finished");
         poll_state.phase = VotingPhase::Results;
         poll_state.serialize(&mut &mut poll_account.data.borrow_mut()[..])?;
@@ -488,12 +506,16 @@ pub fn vote(
     }
     
     let mut party_state = PartyAccount::try_from_slice(&party_data)?;
+    drop(party_data);
 
 
     // Validate voter account is initialized
-    let voter_data: std::cell::Ref<'_, &mut [u8]> = voter_account.data.borrow();
+    let voter_initialized = {
+        let voter_data = voter_account.data.borrow();
+        !voter_data.iter().all(|&b| b == 0)
+    };
     
-    if voter_data.iter().all(|&b| b == 0) {
+    if !voter_initialized {
         msg!("Voter account not initialized");
         
         // Compute voter PDA 
@@ -509,7 +531,7 @@ pub fn vote(
         }
 
         // Create voter PDA 
-        let account_len = VoterAccount::get_account_size(0);
+        let account_len = VoterAccount::get_account_size();
         let rent = Rent::get()?;
         let rent_lamport = rent.minimum_balance(account_len);
         let seeds = &[
@@ -535,8 +557,6 @@ pub fn vote(
             &[seeds],
         )?;
 
-        msg!("Voter creation: {}", voter_pda);
-
         // Initialize VoterAccount
         let voter_state = VoterAccount {
             discriminator: VoterAccount::DISCRIMINATOR.to_string(),
@@ -546,12 +566,18 @@ pub fn vote(
             negative_used: 0,
             voted_parties: Vec::new()
         };
-        voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
-        msg!("Voter state serialized");
-
-    }
     
-    let mut voter_state = VoterAccount::try_from_slice(&voter_data)?;
+        voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
+        msg!("Voter serialized successfully");
+        msg!("Voter state serialized");
+    } 
+
+    let mut voter_state = {
+        let voter_data = voter_account.data.borrow();
+        let mut slice: &[u8] = &voter_data;          // &mut &[u8]
+        let vs = VoterAccount::deserialize(&mut slice)?;
+        vs
+    };
 
     // Only the current owner can initiate
     if voter_state.voter_key != *initializer.key {
@@ -564,8 +590,6 @@ pub fn vote(
         msg!("Voter already voted for this party");
         return Err(JanecekError::AlreadyVoted.into());
     }
-
-    voter_state.voted_parties.push(*party_account.key);
 
     match vote_type {
         VoteType::Positive => {
@@ -587,7 +611,11 @@ pub fn vote(
             msg!("Voter state updated");
         },
     }
+
+    voter_state.voted_parties.push(*party_account.key);
     voter_state.serialize(&mut &mut voter_account.data.borrow_mut()[..])?;
+    msg!("Voter serialized successfully");
+
 
     match vote_type {
         VoteType::Positive => {
@@ -614,8 +642,3 @@ pub fn end_voting(
 
     Ok(())
 }
-
-
-
-
-

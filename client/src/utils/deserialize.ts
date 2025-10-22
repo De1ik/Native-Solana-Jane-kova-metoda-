@@ -108,7 +108,7 @@ export function deserializePollState(data: Buffer): any {
         title: deserializer.readString(),
         description: deserializer.readString(),
         phase: deserializer.readU8(), // VotingPhase enum as u8
-        parties: deserializer.readPubkeyVector(),
+        party_counter: Number(deserializer.readU64()), // Convert BigInt to number
         owner: deserializer.readPubkey(),
         expected_new_owner: deserializer.readPubkey(),
         created_at: deserializer.readI64(),
@@ -123,8 +123,8 @@ export function deserializePartyAccount(data: Buffer): any {
         discriminator: deserializer.readString(),
         poll_id: deserializer.readPubkey(),
         title: deserializer.readString(),
-        positive_votes: deserializer.readU64(),
-        negative_votes: deserializer.readU64()
+        positive_votes: Number(deserializer.readU64()),
+        negative_votes: Number(deserializer.readU64())
     };
 }
 

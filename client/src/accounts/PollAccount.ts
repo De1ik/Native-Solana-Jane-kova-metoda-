@@ -1,12 +1,12 @@
 import { PublicKey } from "@solana/web3.js";
-import { VotingPhase } from "./VotingPhase"
+import { VotingPhase } from "../types/VotingPhase"
 
 export class PollState {
     discriminator!: string;
     title!: string;
     description!: string;
     phase!: number;
-    parties!: Uint8Array[];
+    party_counter!: number;
     owner!: Uint8Array;
     expected_new_owner!: Uint8Array;
     created_at!: bigint;
@@ -22,10 +22,6 @@ export class PollState {
 
     getExpactedNewOwnerPubkey(): PublicKey {
         return new PublicKey(this.expected_new_owner);
-    }
-
-    getPartiesPubkeys(): PublicKey[] {
-        return this.parties.map(party => new PublicKey(party));
     }
 
     getVotingPhase(): VotingPhase {

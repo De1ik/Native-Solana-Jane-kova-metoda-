@@ -1,11 +1,15 @@
 [package]
 name = "janecek_voting"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [lib]
 name = "janecek_voting"
 crate-type = ["cdylib"]
+
+[features]
+default = []
+test-mode = []
 
 [dependencies]
 solana-program = "1.18.10"
