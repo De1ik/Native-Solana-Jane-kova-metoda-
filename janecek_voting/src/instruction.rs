@@ -1,7 +1,8 @@
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{program_error::ProgramError, pubkey::Pubkey};
 use crate::state::VoteType;
 
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub enum JanecekInstruction {
     CreatePoll {
         title: String,

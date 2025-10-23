@@ -494,7 +494,7 @@ pub fn vote(
         msg!("Voting period is finished");
         poll_state.phase = VotingPhase::Results;
         poll_state.serialize(&mut &mut poll_account.data.borrow_mut()[..])?;
-        return Err(JanecekError::VotingPeriodFinished.into());
+        return Ok(()); 
     }
 
     // Validate party account is initialized

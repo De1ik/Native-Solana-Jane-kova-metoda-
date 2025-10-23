@@ -6,7 +6,7 @@ export const CONFIG = {
   rpcUrl: clusterApiUrl('devnet'),
   
   // Program configuration
-  programId: new PublicKey('4tdkaWkV9UoGr3qzpDYQdyBSN3eA4EqKJjhfz3Q7ADkF'), // Replace with your deployed program ID
+  programId: new PublicKey('4tdkaWkV9UoGr3qzpDYQdyBSN3eA4EqKJjhfz3Q7ADkF'),
   
   // Wallet configuration
   walletPath: './wallet.json', 
